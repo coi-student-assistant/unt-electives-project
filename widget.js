@@ -1,5 +1,5 @@
 // Replace with your actual GitHub Pages URL
-const JSON_URL = 'https://github.com/coi-student-assistant/unt-electives-project/blob/main/electives.json';
+const JSON_URL = 'https://coi-student-assistant.github.io/unt-electives-project/electives.json';
 
 // Gateway courses students can check off
 const GATEWAY_COURSES = ["CSCE 1030", "CSCE 1040", "CSCE 2100", "CSCE 2110", "MATH 1710"];
