@@ -5,23 +5,25 @@ import time
 import re
 import sys
 
-# 1. Polite User-Agent: Tells UNT IT who is running the bot
-HEADERS = {"User-Agent": "UNT-Electives-Project-Bot/2.0 (coi-student-assistant@unt.edu)"}
+# 1. Standard Chrome User-Agent to pass through firewall filters
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+}
 BASE_URL = "https://catalog.unt.edu"
 
 def get_latest_catoid():
     """Dynamically finds the most recent UNT Undergraduate Catalog ID."""
     print("Fetching latest catalog ID...")
     try:
-        # 2. Error Handling: Timeout limits prevent the script from hanging forever
         response = requests.get(BASE_URL, headers=HEADERS, timeout=15)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
         catalog_dropdown = soup.find('select', {'name': 'catalog'})
-        for option in catalog_dropdown.find_all('option'):
-            if "Undergraduate" in option.text:
-                return option['value']
+        if catalog_dropdown:
+            for option in catalog_dropdown.find_all('option'):
+                if "Undergraduate" in option.text:
+                    return option['value']
     except Exception as e:
         print(f"Error fetching catalog ID: {e}")
     return None
@@ -37,10 +39,10 @@ def parse_prereqs(prereq_string):
     return list(set(parsed_courses)), len(set(parsed_courses)), complex_flag
 
 def fetch_all_courses(catoid):
-    """Scrapes courses using Acalog pagination, rate limiting, and deep-scraping."""
+    """Scrapes courses using Acalog wildcard search pagination."""
     
-    # Updated Acalog search parameters with cur_cat_oid and item_type=3
-    base_search_url = f"{BASE_URL}/search_advanced.php?cur_cat_oid={catoid}&search_database=Search&search_db=Search&filter%5Bitem_type%5D=3&filter%5Bonly_active%5D=1&cpage="
+    # search_keyword=%20 acts as a wildcard search to display all course listings
+    base_search_url = f"{BASE_URL}/search_advanced.php?cur_cat_oid={catoid}&search_database=Search&search_db=Search&filter%5Bitem_type%5D=3&filter%5Bonly_active%5D=1&search_keyword=%20&cpage="
     
     all_courses = []
     page = 1
@@ -53,14 +55,13 @@ def fetch_all_courses(catoid):
         url = f"{base_search_url}{page}"
         
         try:
-            # 3. Rate Limiting: 2-second pause before pulling the search page
-            time.sleep(2)
+            time.sleep(2)  # Rate limiting pause
             
             response = requests.get(url, headers=HEADERS, timeout=15)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Expanded regex match to catch all preview link variations
+            # Match course preview links inside search results
             course_links = soup.find_all('a', href=re.compile(r'preview_course'))
             
             if not course_links:
@@ -68,9 +69,10 @@ def fetch_all_courses(catoid):
                 has_more_pages = False
                 break
 
+            found_on_page = 0
             for link in course_links:
                 course_title_raw = link.text.strip()
-                course_url = f"{BASE_URL}/{link['href']}"
+                course_url = f"{BASE_URL}/{link['href']}" if not link['href'].startswith('http') else link['href']
                 
                 # Split "CSCE 1030 - Computer Science I" into code and title
                 match = re.match(r'^([A-Z]{3,4}\s\d{4})\s*-\s*(.+)', course_title_raw)
@@ -79,15 +81,14 @@ def fetch_all_courses(catoid):
                     
                 code = match.group(1).strip()
                 title = match.group(2).strip()
+                found_on_page += 1
 
-                # --- Deep Scraping the Individual Course Page ---
-                time.sleep(1.5) 
+                time.sleep(1.2)  # Rate limiting pause for deep scraping
                 
                 try:
                     course_resp = requests.get(course_url, headers=HEADERS, timeout=10)
                     course_soup = BeautifulSoup(course_resp.text, 'html.parser')
                     
-                    # Extract prerequisite text
                     body_text = course_soup.text
                     prereq_raw = ""
                     prereq_match = re.search(r'Prerequisite\(s\):(.*?)(\n|<|$)', body_text)
@@ -109,6 +110,10 @@ def fetch_all_courses(catoid):
                     print(f"Failed to deep-scrape {code}: {inner_e}")
                     continue
 
+            if found_on_page == 0:
+                print("No valid course links on this page. Stopping.")
+                break
+
             page += 1
             
         except requests.exceptions.RequestException as e:
@@ -116,7 +121,7 @@ def fetch_all_courses(catoid):
             time.sleep(10)
 
     return all_courses
-    
+
 if __name__ == "__main__":
     catoid = get_latest_catoid()
     if not catoid:
