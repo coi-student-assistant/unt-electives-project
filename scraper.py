@@ -39,8 +39,9 @@ def parse_prereqs(prereq_string):
 def fetch_all_courses(catoid):
     """Scrapes courses using Acalog pagination, rate limiting, and deep-scraping."""
     
-    # Acalog search parameters: navoid=search, item_type=3 (courses)
-    base_search_url = f"{BASE_URL}/search_advanced.php?catoid={catoid}&search_database=Search&search_db=Search&cpage="
+
+    # Updated Acalog search parameters with explicit course filtering (item_type=3)
+    base_search_url = f"{BASE_URL}/search_advanced.php?catoid={catoid}&navoid=search&search_database=Search&search_db=Search&filter%5Bitem_type%5D=3&cpage="
     
     all_courses = []
     page = 1
