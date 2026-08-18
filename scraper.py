@@ -39,9 +39,8 @@ def parse_prereqs(prereq_string):
 def fetch_all_courses(catoid):
     """Scrapes courses using Acalog pagination, rate limiting, and deep-scraping."""
     
-
-    # Updated Acalog search parameters with explicit course filtering (item_type=3)
-    base_search_url = f"{BASE_URL}/search_advanced.php?catoid={catoid}&navoid=search&search_database=Search&search_db=Search&filter%5Bitem_type%5D=3&cpage="
+    # Updated Acalog search parameters with cur_cat_oid and item_type=3
+    base_search_url = f"{BASE_URL}/search_advanced.php?cur_cat_oid={catoid}&search_database=Search&search_db=Search&filter%5Bitem_type%5D=3&filter%5Bonly_active%5D=1&cpage="
     
     all_courses = []
     page = 1
@@ -61,8 +60,8 @@ def fetch_all_courses(catoid):
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Find all links pointing to individual course preview pages
-            course_links = soup.find_all('a', href=re.compile(r'preview_course\.php'))
+            # Expanded regex match to catch all preview link variations
+            course_links = soup.find_all('a', href=re.compile(r'preview_course'))
             
             if not course_links:
                 print("No more courses found. Pagination complete.")
@@ -82,7 +81,6 @@ def fetch_all_courses(catoid):
                 title = match.group(2).strip()
 
                 # --- Deep Scraping the Individual Course Page ---
-                # Rate Limiting: 1.5-second pause before opening the course details
                 time.sleep(1.5) 
                 
                 try:
@@ -108,7 +106,6 @@ def fetch_all_courses(catoid):
                         "catalog_url": course_url
                     })
                 except Exception as inner_e:
-                    # 4. Resilient Continuation: If one course fails, skip it but don't kill the whole script
                     print(f"Failed to deep-scrape {code}: {inner_e}")
                     continue
 
@@ -117,10 +114,9 @@ def fetch_all_courses(catoid):
         except requests.exceptions.RequestException as e:
             print(f"Network error on page {page}: {e}. Retrying in 10 seconds...")
             time.sleep(10)
-            # By not incrementing 'page', the loop naturally retries the failed page.
 
     return all_courses
-
+    
 if __name__ == "__main__":
     catoid = get_latest_catoid()
     if not catoid:
